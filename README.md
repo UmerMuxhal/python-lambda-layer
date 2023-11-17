@@ -38,7 +38,7 @@ Usage of this action requires following parameters.
 | `layer_directory` | string | No       | Path of `requirements.txt` file in repository.                                                         |
 | `bucket_name`     | string | Yes      | S3 bucket name where lambda layer will be uploaded                                                     |
 | `bucket_path`     | string | No       | Folder path inside the S3 bucket (Optional)                                                            |
-| `aws_account_id`  | string | No       | An AWS Account ID to grant layer usage permissions to, default value is `*` to share with all acoounts |
+| `aws_account_id`  | string | No       | An AWS Account ID to grant layer usage permissions to, default value is `*` to share with all accounts |
 
 The `python_version` only accepts versions of python mentioned in AWS Lambda
 docs; [Lambda runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html).
