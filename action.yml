@@ -1,0 +1,80 @@
+name: Publish or Update AWS Lambda Layer for python
+description: This action will create version or publish an AWS Lambda Layer from GitHub Workflow.
+author: Umer Mughal
+
+
+branding:
+  icon: layers
+  color: green
+
+inputs:
+  python_version:
+    description: Python Version, default value is '3.7'
+    default: "3.7"
+  layer_name:
+    description: Name of AWS Lambda Layer
+    required: true
+  layer_directory:
+    description: Working directory in repository where "requirements.txt" file exists
+    default: "./"
+  bucket_name:
+    description: S3 bucket name where lambda layer will be uploaded
+    required: true
+  bucket_path:
+    description: An optional prefix that will be used for a folder path inside the S3 bucket
+    default: ""
+  aws_account_id:
+    description: An AWS Account ID to grant layer usage permissions to. (Use "*" to share with all accounts)
+    default: "*"
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout Branch
+      uses: actions/checkout@v3
+
+    - name: Setup Python Version
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python_version }}
+        cache: 'pip'
+
+    - name: Install Python Requirements
+      shell: bash
+      working-directory: ${{ inputs.layer_directory }}
+      run: |
+        echo "Building Python Layer 🚧"
+        mkdir -p python && pip3 install -r requirements.txt -t ./python
+        zip -r lambda_layer.zip ./python
+
+    - name: Upload Zip and Create Layer
+      shell: bash
+      id: publish-layer
+      working-directory: ${{ inputs.layer_directory }}
+      run: |
+        RUNTIME="python${{ inputs.python_version }}"
+        VERSION="${{ inputs.python_version }}"
+        NEW_LAYER_NAME="${{ inputs.layer_name }}-$(echo "$VERSION" | tr -d '.')"
+        ZIP_FILE="${NEW_LAYER_NAME}.zip"
+        
+        echo "Upload Lambda Layer on S3 🚀"
+        aws s3 cp ./lambda_layer.zip s3://${{ inputs.bucket_name }}/${{ inputs.bucket_path }}${ZIP_FILE}
+        
+        RESPONSE=$(aws lambda publish-layer-version \
+        --layer-name ${NEW_LAYER_NAME} \
+        --compatible-runtimes ${RUNTIME} \
+        --description "${{ inputs.layer_name }} Layer" \
+        --content S3Bucket=${{ inputs.bucket_name }},S3Key=${{ inputs.bucket_path }}${ZIP_FILE})
+
+        echo "::set-output name=layer_version::$(echo $RESPONSE | jq -r '.Version')"
+        echo "::set-output name=layer_arn::$(echo $RESPONSE | jq -r '.LayerArn')"
+        echo "::set-output name=layer_name::${NEW_LAYER_NAME}"
+
+    - name: Add Lambda Layer Permission
+      shell: bash
+      run: |
+        aws lambda add-layer-version-permission --layer-name ${{ steps.publish-layer.outputs.layer_name }} \
+        --version-number ${{ steps.publish-layer.outputs.layer_version }} \
+        --principal ${{ inputs.aws_account_id }} \
+        --statement-id "GrantAccountAccess-${RANDOM}" \
+        --action lambda:GetLayerVersion
